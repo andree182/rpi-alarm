@@ -1,7 +1,7 @@
 # AVR-GCC Makefile
 PROJECT=name
-# SOURCES=main.c uart_io.c usi_uart.c
-SOURCES=main.c uart_io.c sw_uart.c
+SOURCES=main.c uart_io.c usi_uart.c
+# SOURCES=main.c uart_io.c sw_uart.c
 CC=avr-gcc
 OBJCOPY=avr-objcopy
 MMCU=attiny2313

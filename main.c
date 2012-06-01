@@ -10,7 +10,7 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include "uart_io.h"
-#include "sw_uart.h"
+#include "usi_uart.h"
 
 static int movement;
 
@@ -90,7 +90,7 @@ ISR(PCINT_vect)
     }
     
     if (!(PINB & _BV(PB4))) {
-        SW_UART_start_rx();
+        USI_UART_start_rx();
     }
 }
 
@@ -115,7 +115,7 @@ int main (void)
     GIMSK |= _BV(PCIE);
     PCMSK |= _BV(PCINT3);
     
-    SW_UART_init_rx();
+    USI_UART_init_rx();
     
     /* Private flags */
     movement = 0;
@@ -136,8 +136,8 @@ int main (void)
                 PORTB &= ~_BV(PB0);
                 break;
             }
-        } else if (SW_UART_receive_is_ready()) {
-            UART_transmit(SW_UART_receive());
+        } else if (USI_UART_receive_is_ready()) {
+            UART_transmit(USI_UART_receive());
             blink_led(LED_GREEN);
         }
     }
