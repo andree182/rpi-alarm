@@ -2,10 +2,6 @@
 #define __AVR_ATtiny2313__
 #endif
 
-#ifndef F_CPU
-#define F_CPU 1000000UL  // 1 MHz
-#endif
-
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
@@ -78,6 +74,11 @@ static void blink_led(int which)
 
 ISR(PCINT_vect)
 {
+    if (!(PINB & _BV(PB5))) {
+        PORTD |= _BV(PD5);
+        USI_UART_start_rx();
+    }
+    
     if (PINB & _BV(PB3)) {
         movement = 1;
         PORTB |= _BV(PB2);
@@ -87,10 +88,6 @@ ISR(PCINT_vect)
         PORTB &= ~_BV(PB2);
         UART_transmit('m');
         UART_transmit('\n');
-    }
-    
-    if (!(PINB & _BV(PB5))) {
-        USI_UART_start_rx();
     }
 }
 
@@ -114,7 +111,7 @@ int main (void)
     UART_endl();
 
     /* enable (led) outputs */
-    DDRD = _BV(PD6);
+    DDRD = _BV(PD6) | _BV(PD5) | _BV(PD4);
     DDRB = _BV(PB0) | _BV(PB1) | _BV(PB2);
     
     /* Set input without pull-up */
