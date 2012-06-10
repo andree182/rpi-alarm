@@ -20,7 +20,7 @@
 
 #define TICKS_PER_SYMBOL ((SYSTEM_CLOCK / BAUDRATE) / TIMER_PRESCALER)
 
-#define UART_RX_BUFFER_SIZE        16     /* 2,4,8,16,32,64,128 or 256 bytes */
+#define UART_RX_BUFFER_SIZE        32     /* 2,4,8,16,32,64,128 or 256 bytes */
 
 // NOTE: This may contain bigger values if we were waking up CPU
 // #define INTERRUPT_STARTUP_DELAY   (0x11 / TIMER_PRESCALER)
@@ -35,8 +35,8 @@
 #define TIMER0_MAX (256) /* actually, the max value is of course (TIMER0_MAX - 1) */
 
 
-#define TIMER0_SEED               (TIMER0_MAX - TICKS_PER_SYMBOL)
-// #define TIMER0_SEED               (TIMER0_MAX - ( (SYSTEM_CLOCK / BAUDRATE) / TIMER_PRESCALER )) + 9
+// #define TIMER0_SEED               (TIMER0_MAX - TICKS_PER_SYMBOL)
+#define TIMER0_SEED               (TIMER0_MAX - TICKS_PER_SYMBOL) + 5
 
 #if ( (TICKS_PER_SYMBOL * 3/2) > (TIMER0_MAX - INTERRUPT_STARTUP_DELAY) )
     // delay between start and first bits is too long, so sample also start bit (but don't put it in the result)
@@ -57,10 +57,12 @@ unsigned char initial_timer0_seed;
 unsigned char usi_counter_seed_receive;
 unsigned char timer0_seed;
 
-static unsigned char          UART_RxBuf[UART_RX_BUFFER_SIZE];
+static volatile unsigned char          UART_RxBuf[UART_RX_BUFFER_SIZE];
 static volatile unsigned char UART_RxHead;
 static volatile unsigned char UART_RxTail;
+#if STOP_BIT > 1
 static unsigned char          UART_RxPhase;
+#endif
 
 void USI_UART_init(void)
 {
@@ -128,9 +130,9 @@ void USI_UART_start_rx(void)
         usi_counter_seed_receive;
 
     PCMSK &= ~_BV(PCINT5); // Disable pin change interrupt for PB5
-
+#if STOP_BIT > 1
     UART_RxPhase = 0;
-
+#endif
 	PORTD |= _BV(PD5);
 }
 

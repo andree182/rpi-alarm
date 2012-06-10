@@ -121,6 +121,7 @@ int main (void)
     PCMSK |= _BV(PCINT3);
     
     USI_UART_init();
+    USI_UART_flush();
     USI_UART_init_rx();
     
     /* Private flags */
