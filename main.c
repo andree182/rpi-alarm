@@ -1,5 +1,3 @@
-// andree.sk
-
 #ifndef __AVR_ATtiny2313__
 #define __AVR_ATtiny2313__
 #endif
@@ -91,9 +89,17 @@ ISR(PCINT_vect)
         UART_transmit('\n');
     }
     
-    if (!(PINB & _BV(PB4))) {
+    if (!(PINB & _BV(PB5))) {
         USI_UART_start_rx();
     }
+}
+
+static void print_usi_settings(void)
+{
+    UART_print_ci('I', initial_timer0_seed);
+    UART_print_ci('S', usi_counter_seed_receive);
+    UART_print_ci('T', timer0_seed);
+    UART_transmit('\n');
 }
 
 int main (void)
@@ -117,6 +123,7 @@ int main (void)
     GIMSK |= _BV(PCIE);
     PCMSK |= _BV(PCINT3);
     
+    USI_UART_init();
     USI_UART_init_rx();
     
     /* Private flags */
@@ -137,10 +144,37 @@ int main (void)
             case 'x':
                 PORTB &= ~_BV(PB0);
                 break;
+            case 'o':
+                print_usi_settings();
+                break;
+            case 'I':
+                initial_timer0_seed++;
+                print_usi_settings();
+                break;
+            case 'i':
+                initial_timer0_seed--;
+                print_usi_settings();
+                break;
+            case 'S':
+                usi_counter_seed_receive++;
+                print_usi_settings();
+                break;
+            case 's':
+                usi_counter_seed_receive--;
+                print_usi_settings();
+                break;
+            case 'T':
+                timer0_seed++;
+                print_usi_settings();
+                break;
+            case 't':
+                timer0_seed--;
+                print_usi_settings();
+                break;
             }
         } else if (USI_UART_receive_is_ready()) {
-            UART_transmit(USI_UART_receive());
             blink_led(LED_GREEN);
+            UART_transmit(USI_UART_receive());
         }
     }
 }
