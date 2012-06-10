@@ -75,7 +75,6 @@ static void blink_led(int which)
 ISR(PCINT_vect)
 {
     if (!(PINB & _BV(PB5))) {
-        PORTD |= _BV(PD5);
         USI_UART_start_rx();
     }
     
@@ -111,7 +110,7 @@ int main (void)
     UART_endl();
 
     /* enable (led) outputs */
-    DDRD = _BV(PD6) | _BV(PD5) | _BV(PD4);
+    DDRD = _BV(PD6);
     DDRB = _BV(PB0) | _BV(PB1) | _BV(PB2);
     
     /* Set input without pull-up */

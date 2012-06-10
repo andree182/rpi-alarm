@@ -35,8 +35,8 @@
 #define TIMER0_MAX (256) /* actually, the max value is of course (TIMER0_MAX - 1) */
 
 
-// #define TIMER0_SEED               (TIMER0_MAX - TICKS_PER_SYMBOL)
-#define TIMER0_SEED               (TIMER0_MAX - TICKS_PER_SYMBOL) + 5
+#define TIMER0_SEED               (TIMER0_MAX - TICKS_PER_SYMBOL)
+// #define TIMER0_SEED               (TIMER0_MAX - TICKS_PER_SYMBOL) + 5
 
 #if ( (TICKS_PER_SYMBOL * 3/2) > (TIMER0_MAX - INTERRUPT_STARTUP_DELAY) )
     // delay between start and first bits is too long, so sample also start bit (but don't put it in the result)
@@ -66,16 +66,6 @@ static unsigned char          UART_RxPhase;
 
 void USI_UART_init(void)
 {
-// SERIAL:
-//     initial_timer0_seed = 242;
-//     usi_counter_seed_receive = 8;
-//     timer0_seed = 158;
-    
-// RFID:
-//     initial_timer0_seed = 215;
-//     usi_counter_seed_receive = 9;
-//     timer0_seed = 152;
-
 	initial_timer0_seed = INITIAL_TIMER0_SEED;
 	usi_counter_seed_receive = USI_COUNTER_SEED_RECEIVE;
 	timer0_seed = TIMER0_SEED;
@@ -103,7 +93,6 @@ void USI_UART_init_rx(void)
 
 void USI_UART_start_rx(void)
 {
-	PORTD &= ~_BV(PD5);
     /* PB5 should be low now (start bit). */
     
     USIDR = 0;
@@ -133,13 +122,10 @@ void USI_UART_start_rx(void)
 #if STOP_BIT > 1
     UART_RxPhase = 0;
 #endif
-	PORTD |= _BV(PD5);
 }
 
 ISR(USI_OVERFLOW_vect)
-{
-	PORTD &= ~_BV(PD5);
-	
+{	
     unsigned char tmphead;
     
     tmphead = (UART_RxHead + 1) & UART_RX_BUFFER_MASK;
@@ -159,9 +145,7 @@ ISR(USI_OVERFLOW_vect)
 }
 
 ISR(TIMER0_OVF_vect)
-{
-	PORTD |= _BV(PD4);
-	
+{	
 #if STOP_BIT == 2
     if (UART_RxPhase == 1) {
         TCCR0B  = 0; // Stop Timer0.
@@ -169,10 +153,6 @@ ISR(TIMER0_OVF_vect)
     }
 #endif
     TCNT0 += timer0_seed;
-    nop();
-    nop();
-    nop();
-    PORTD &= ~_BV(PD4);
 }
 
 static unsigned char Bit_Reverse(unsigned char x)
