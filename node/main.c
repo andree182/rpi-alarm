@@ -1,3 +1,12 @@
+/*
+ * rfid (usi uart) - PB5
+ * piezo - PB4
+ * door magnet - PB3 (down on closed, up on open - using pull-up)
+ * motion detector PB2 (no pull-up)
+ * yellow led - PB0
+ * red led    - PD6
+ */
+
 #ifndef __AVR_ATtiny2313__
 #define __AVR_ATtiny2313__
 #endif
@@ -8,7 +17,7 @@
 #include "uart_io.h"
 #include "usi_uart.h"
 
-static int movement;
+static int movement, doorOpen;
 
 static void delay_ms(uint16_t ms)
 {
@@ -20,11 +29,11 @@ static void delay_ms(uint16_t ms)
 
 enum {
     LED_RED = 0,
-    LED_YELLOW = 1,
-    LED_GREEN = 2,
-    LED_BLUE = 3,
+    LED_RED_FAST,
+    LED_YELLOW,
 };
 
+#ifdef USI_DEBUG
 // const unsigned char hex[] = "0123456789abcdef";
 // 
 // static void UART_print_ch(char c, uint8_t i)
@@ -45,30 +54,69 @@ static void UART_print_ci(char c, uint8_t i)
     UART_transmit(i % 10 + '0');
     UART_endl();
 }
+#endif
 
 static void blink_led(int which)
 {
     switch (which) {
     case LED_RED:
-        PORTB |= _BV(PB1);
+        PORTD |= _BV(PD6);
         delay_ms(10);
-        PORTB &= ~_BV(PB1);
+        PORTD &= ~_BV(PD6);
+        break;
+    case LED_RED_FAST:
+        PORTD |= _BV(PD6);
+        _delay_us(100);
+        PORTD &= ~_BV(PD6);
+        break;
         break;
     case LED_YELLOW:
         PORTB |= _BV(PB0);
         delay_ms(10);
         PORTB &= ~_BV(PB0);
         break;
-    case LED_GREEN:
+    }
+}
+
+static void msg(char c)
+{
+    UART_transmit('!');
+    UART_transmit(c);
+}
+
+#define READ_MOVEMENT() \
+    movement = PINB & _BV(PB2)
+
+#define READ_DOORS_OPEN() \
+    doorOpen = PINB & _BV(PB3)
+    
+static void status_msg(void)
+{
+    READ_MOVEMENT();        
+    READ_DOORS_OPEN();
+    
+#ifdef LED_SIGNALLING
+    if (movement) 
         PORTD |= _BV(PD6);
-        delay_ms(10);
+    else
         PORTD &= ~_BV(PD6);
-        break;
-    case LED_BLUE:
-        PORTB |= _BV(PB2);
-        delay_ms(10);
-        PORTB &= ~_BV(PB2);
-        break;
+
+    if (doorOpen)
+        PORTB |= _BV(PB0);
+    else
+        PORTB &= ~_BV(PB0);
+#endif
+
+    if (movement || doorOpen) {
+        msg('{');
+#ifdef LED_SIGNALLING
+        PORTD |= _BV(PD6);
+#endif
+    } else {
+        msg('}');
+#ifdef LED_SIGNALLING
+        PORTD &= ~_BV(PD6);
+#endif
     }
 }
 
@@ -76,19 +124,12 @@ ISR(PCINT_vect)
 {
     if (!(PINB & _BV(PB5))) {
         USI_UART_start_rx();
-    }
-    
-    if (PINB & _BV(PB3)) {
-        movement = 1;
-        PORTB |= _BV(PB2);
-        UART_transmit('M');
-    } else if (movement) {
-        movement = 0;
-        PORTB &= ~_BV(PB2);
-        UART_transmit('m');
-        UART_transmit('\n');
+    } else {
+        status_msg();
     }
 }
+
+#ifdef USI_DEBUG
 
 static void print_usi_settings(void)
 {
@@ -98,6 +139,8 @@ static void print_usi_settings(void)
     UART_transmit('\n');
 }
 
+#endif
+
 int main (void)
 {
     /* 9600 baud with 8MHz div 8 */
@@ -105,26 +148,27 @@ int main (void)
     
     _delay_ms(20);
 
-    UART_transmit('h');
-    UART_transmit('i');
-    UART_endl();
-
-    /* enable (led) outputs */
+    /* enable outputs */
+    DDRB = _BV(PB0) | _BV(PB4);
     DDRD = _BV(PD6);
-    DDRB = _BV(PB0) | _BV(PB1) | _BV(PB2);
     
     /* Set input without pull-up */
-    DDRB &= ~_BV(PB3); // set input
-    PORTB &= ~_BV(PB3); // no pull-up
+    DDRB &= ~_BV(PB2); // set input, no pullup
+    PORTB &= ~_BV(PB2);
+    
+    DDRB &= ~_BV(PB3); // set input + pullup
+    PORTB |= _BV(PB3);
+    
     GIMSK |= _BV(PCIE);
-    PCMSK |= _BV(PCINT3);
+    PCMSK |= _BV(PCINT3) | _BV(PCINT2); // interrupt on doors/movement
     
     USI_UART_init();
     USI_UART_flush();
     USI_UART_init_rx();
     
     /* Private flags */
-    movement = 0;
+    READ_MOVEMENT();
+    READ_DOORS_OPEN();
 
     sei();
     
@@ -132,15 +176,44 @@ int main (void)
     while (1) {
         if (UART_receive_is_ready()) {
             unsigned char c = UART_receive();
-            blink_led(LED_RED);
             
             switch (c) {
-            case 'X':
+            case '?':
+                blink_led(LED_RED);
+                msg('!');
+                break;
+            case 'n':
+                UART_transmit('\n');
+                UART_transmit('\r');
+                break;
+            case 'Y':
                 PORTB |= _BV(PB0);
                 break;
-            case 'x':
+            case 'y':
                 PORTB &= ~_BV(PB0);
                 break;
+            case 'R':
+                PORTD |= _BV(PD6);
+                break;
+            case 'r':
+                PORTD &= ~_BV(PD6);
+                break;
+            case 'B':
+                // setup beep using PWM on PB4
+                TCCR1A = 0b00100011;
+                TCCR1B = 0b00011001;
+                // 5kHz (piezo resonance frequency)
+                OCR1A = 200;
+                OCR1B = 100;
+                break;
+            case 'b':
+                TCCR1A = 0;
+                TCCR1B = 0; //just for sure...
+                break;
+            case 'd':
+                status_msg();
+                break;
+#ifdef USI_DEBUG
             case 'o':
                 print_usi_settings();
                 break;
@@ -168,9 +241,10 @@ int main (void)
                 timer0_seed--;
                 print_usi_settings();
                 break;
+#endif
             }
         } else if (USI_UART_receive_is_ready()) {
-            blink_led(LED_GREEN);
+            blink_led(LED_RED_FAST);
             UART_transmit(USI_UART_receive());
         }
     }
