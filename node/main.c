@@ -213,6 +213,13 @@ int main (void)
             case 'd':
                 status_msg();
                 break;
+            case 'D':
+                status_msg();
+                if (movement)
+                    msg('m');
+                if (doorOpen)
+                    msg('d');
+                break;
 #ifdef USI_DEBUG
             case 'o':
                 print_usi_settings();
