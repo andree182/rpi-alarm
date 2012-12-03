@@ -7,9 +7,9 @@ import subprocess
 def enum(**enums):
     return type('Enum', (), enums)
 
-REAL_HW = False
+ARM_SIRENE = False
 
-if REAL_HW:
+if True:
     NODE_TTY = "/dev/ttyAMA0"
 else:
     # socat PTY,link=$HOME/testpty,echo=0,raw -
@@ -22,12 +22,17 @@ CMD_START_WARNING = 'B'
 CMD_STOP_WARNING = 'b'
 CMD_PING = '?'
 CMD_PONG = '!'
+CMD_STATUS_REQUEST = 'd'
 
+### robustness settings
 # delay between pings
 PING_DELAY = 5
 # delay until the pong is expected
 PONG_DELAY = PING_DELAY * 2
+# delay between safety status requests
+STATUS_REQUEST_DELAY = 5
 
+### timeouts settings
 # number of seconds after which login/logout is done when a known fob is detected
 FOB_DELAY = 5
 # maximum time between movement and alarm warning trigger
@@ -37,9 +42,9 @@ ALARM_TIMEOUT = 10
 # time after fob entered after which the alarm is armed
 ALARM_ARM_TIMEOUT = 30
 # length of silence/beep during lock warning
-ALARM_WARNING_LOCK_INTERVAL = 1
+ALARM_LOCK_WARNING_INTERVAL = 1 # should be the smallest non-0 value around
 
-# time after which the automatic unlock happens
+# time after which the automatic unlock happens (to prevent too whole day of alarm sirene buzzing)
 ALARM_DISABLE_TIMEOUT = 2 * 60
 
 FOBS = [
@@ -56,25 +61,19 @@ def detectFob(buf):
             return True
     return False
 
-tty = serial.Serial(NODE_TTY, baudrate = 9600, timeout = 1)
+tty = serial.Serial(NODE_TTY, baudrate = 9600, timeout = ALARM_LOCK_WARNING_INTERVAL * 0.5) # NOTE: timeout here specifies the granularity of events
 
 buf = ""
 AlarmStatus = enum(OPEN = 0, LOCKING = 1, LOCKED = 2, TRIGGERED = 3)
 status = AlarmStatus.OPEN
 
 class NodePing:
-    def __init__(self):
-        pass
-
     def run(self):
         global actions, tty
         tty.write(CMD_PING)
         actions += [Action(time.time() + PONG_DELAY, NodePong())]
 
 class NodePong:
-    def __init__(self):
-        pass
-    
     @staticmethod
     def handlePong():
         global actions, tty
@@ -85,10 +84,17 @@ class NodePong:
         NodePong.handlePong()
         print("Pong timeout @ " + time.asctime())
 
+class NodeStatusRequest:
+    def run(self):
+        global actions, tty
+        tty.write(CMD_STATUS_REQUEST)
+        actions += [Action(time.time() + STATUS_REQUEST_DELAY, NodeStatusRequest())]
+
 class AlarmWarning:
-    def __init__(self, warnLock):
+    def __init__(self, warnLock, length = 0):
         self.warnLock = warnLock
         self.beep = False
+        self.length = length
 
     def run(self):
         global actions, tty
@@ -100,9 +106,9 @@ class AlarmWarning:
         
         if self.warnLock:
             # reschedule to beep in intervals
-            aw = AlarmWarning(self.warnLock)
+            aw = AlarmWarning(self.warnLock, self.length)
             aw.beep = self.beep
-            actions += [Action(time.time() + 2 * ALARM_WARNING_LOCK_INTERVAL, aw)]
+            actions += [Action(time.time() + self.length, aw)]
 
     @staticmethod
     def disarm():
@@ -111,8 +117,14 @@ class AlarmWarning:
         actions = [a for a in actions if (not isinstance(a.action, AlarmWarning))]
         print("AlarmWarning disable @ " + time.asctime())
 
+class AlarmWarningIntensify:
+    def run(self):
+        global actions, tty
+        AlarmWarning.disarm()
+        actions += [Action(time.time() + ALARM_WARNING_TIMEOUT, AlarmWarning(True, ALARM_LOCK_WARNING_INTERVAL * 0.5))]
+        
 def subcall(path):
-    if REAL_HW:
+    if ARM_SIRENE:
         subprocess.call(path, shell = True)
     else:
         print path
@@ -160,6 +172,8 @@ class AlarmArm:
         print("Locked @ " + time.asctime())
         
 class HandleMovement:
+    lastMovementBegin = False
+
     @staticmethod
     def begin():
         global AlarmStatus, status
@@ -168,9 +182,15 @@ class HandleMovement:
             actions += [Action(time.time() + ALARM_WARNING_TIMEOUT, AlarmWarning(False))]
             actions += [Action(time.time() + ALARM_TIMEOUT, Alarm())]
 
+        if not HandleMovement.lastMovementBegin:
+            print "Movement begin @ " + time.asctime()
+            HandleMovement.lastMovementBegin = True
+                
     @staticmethod
     def end():
-        pass
+        if HandleMovement.lastMovementBegin:
+            print "Movement end @ " + time.asctime()
+            HandleMovement.lastMovementBegin = False
 
 class HandleFob:
     lastFobTime = 0
@@ -189,7 +209,8 @@ class HandleFob:
             status = AlarmStatus.OPEN
             print("Open @ " + time.asctime())
         elif (status == AlarmStatus.OPEN):
-            actions += [Action(time.time() + ALARM_WARNING_TIMEOUT, AlarmWarning(True))]
+            actions += [Action(time.time() + ALARM_WARNING_TIMEOUT, AlarmWarning(True, ALARM_LOCK_WARNING_INTERVAL))]
+            actions += [Action(time.time() + ALARM_WARNING_TIMEOUT + ALARM_ARM_TIMEOUT * 0.75, AlarmWarningIntensify())]
             actions += [Action(time.time() + ALARM_ARM_TIMEOUT, AlarmArm())]
             status = AlarmStatus.LOCKING
             print("Locking @ " + time.asctime())
@@ -204,16 +225,16 @@ class Action:
         self.time = time
         self.action = action
 
-actions = [Action(time.time(), NodePing())]
+actions = [Action(time.time(), NodePing()), Action(time.time(), NodeStatusRequest())]
 
 while True:
     c = tty.read()
     if c == CMD_START:
         c = tty.read()
         if c == CMD_MOVEMENT_BEGIN:
-            handleMovement.begin()
+            HandleMovement.begin()
         elif c == CMD_MOVEMENT_END:
-            handleMovement.end()
+            HandleMovement.end()
         elif c == CMD_PONG:
             NodePong.handlePong()
         else:
@@ -222,12 +243,22 @@ while True:
         buf += c
         if detectFob(buf):
             HandleFob.entered()
+            buf = ""
 
     curTime = time.time()
-    newActions = []
-    for a in actions:
-        if (a.time <= curTime):
-            a.action.run()
-        else:
-            newActions += [a]
-    actions = newActions
+    
+    needRescan = True
+    while needRescan:
+        needRescan = False
+        for a in actions:
+            if (a.time <= curTime):
+                actionsOld = actions[:]
+                a.action.run()
+                try:
+                    actions.remove(a)
+                    if actions[:] != actionsOld[:]:
+                        needRescan = True
+                        break
+                except:
+                    needRescan = True
+                    break;
