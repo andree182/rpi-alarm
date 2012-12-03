@@ -3,6 +3,7 @@
 import serial
 import os, time
 import subprocess
+import sys
 
 def enum(**enums):
     return type('Enum', (), enums)
@@ -14,6 +15,8 @@ if True:
 else:
     # socat PTY,link=$HOME/testpty,echo=0,raw -
     NODE_TTY = "/home/andree/testpty"
+
+sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
 CMD_START = '!'
 CMD_MOVEMENT_BEGIN = '{'
@@ -116,12 +119,26 @@ class AlarmWarning:
         tty.write(CMD_STOP_WARNING)
         actions = [a for a in actions if (not isinstance(a.action, AlarmWarning))]
         print("AlarmWarning disable @ " + time.asctime())
+        
+    @staticmethod
+    def notifyFob():
+        for i in range(0,3):
+            tty.write(CMD_START_WARNING)
+            time.sleep(0.05)
+            tty.write(CMD_STOP_WARNING)
+            time.sleep(0.05)
 
 class AlarmWarningIntensify:
     def run(self):
         global actions, tty
         AlarmWarning.disarm()
         actions += [Action(time.time() + ALARM_WARNING_TIMEOUT, AlarmWarning(True, ALARM_LOCK_WARNING_INTERVAL * 0.5))]
+        
+    @staticmethod
+    def disarm():
+        global actions
+        actions = [a for a in actions if (not isinstance(a.action, AlarmWarningIntensify))]
+        print("AlarmWarningIntensify disable @ " + time.asctime())
         
 def subcall(path):
     if ARM_SIRENE:
@@ -216,9 +233,12 @@ class HandleFob:
             print("Locking @ " + time.asctime())
         elif (status == AlarmStatus.LOCKING):
             AlarmWarning.disarm()
+            AlarmWarningIntensify.disarm()
             actions = [a for a in actions if not isinstance(a.action, AlarmArm)]
             status = AlarmStatus.OPEN
             print("Locking cancel @ " + time.asctime())
+
+        AlarmWarning.notifyFob()
 
 class Action:
     def __init__(self, time, action):
