@@ -89,7 +89,18 @@ static void msg(char c)
 
 #define READ_DOORS_OPEN() \
     doorOpen = PINB & _BV(PB3)
-    
+
+static void status_msg_one(int which, int status)
+{
+    msg(which + '0');
+
+    if (status) {
+        msg('{');
+    } else {
+        msg('}');
+    }
+}
+
 static void status_msg(void)
 {
     READ_MOVEMENT();        
@@ -107,17 +118,8 @@ static void status_msg(void)
         PORTB &= ~_BV(PB0);
 #endif
 
-    if (movement || doorOpen) {
-        msg('{');
-#ifdef LED_SIGNALLING
-        PORTD |= _BV(PD6);
-#endif
-    } else {
-        msg('}');
-#ifdef LED_SIGNALLING
-        PORTD &= ~_BV(PD6);
-#endif
-    }
+    status_msg_one(0, movement);
+    status_msg_one(1, doorOpen);
 }
 
 ISR(PCINT_vect)
@@ -143,6 +145,8 @@ static void print_usi_settings(void)
 
 int main (void)
 {
+    int ocr1a, ocr1b;
+
     /* 9600 baud with 8MHz div 8 */
     UART_init(12);
     
@@ -200,11 +204,14 @@ int main (void)
                 break;
             case 'B':
                 // setup beep using PWM on PB4
+                // 5kHz (piezo resonance frequency) is 200|100
+                ocr1a = (UART_receive() - '0') * 20;
+                ocr1b = (UART_receive() - '0') * 20;
+
                 TCCR1A = 0b00100011;
                 TCCR1B = 0b00011001;
-                // 5kHz (piezo resonance frequency)
-                OCR1A = 200;
-                OCR1B = 100;
+                OCR1A = ocr1a;
+                OCR1B = ocr1b;
                 break;
             case 'b':
                 TCCR1A = 0;
@@ -212,13 +219,6 @@ int main (void)
                 break;
             case 'd':
                 status_msg();
-                break;
-            case 'D':
-                status_msg();
-                if (movement)
-                    msg('m');
-                if (doorOpen)
-                    msg('d');
                 break;
 #ifdef USI_DEBUG
             case 'o':
