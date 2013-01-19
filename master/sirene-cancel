@@ -1,0 +1,3 @@
+#!/bin/sh
+
+echo "The home alarm sirene was cancelled to prevent too long alarm!" | sendmail andree@andree.sk

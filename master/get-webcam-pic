@@ -1,0 +1,6 @@
+#!/bin/sh
+
+camusbdev=`lsusb|grep -i cam|sed 's%Bus 00\(.\) Device 00\(.\).*%/dev/usbdev\1.\2%'`
+sudo ./usbreset $camusbdev
+
+sudo fswebcam -d /dev/video0 $1
