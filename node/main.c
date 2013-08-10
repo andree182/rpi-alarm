@@ -207,6 +207,10 @@ int main (void)
                 // 5kHz (piezo resonance frequency) is 200|100
                 ocr1a = (UART_receive() - '0') * 20;
                 ocr1b = (UART_receive() - '0') * 20;
+                if (UART_receive() != '|')
+                    break;
+                if (UART_receive() != '!')
+                    break;
 
                 TCCR1A = 0b00100011;
                 TCCR1B = 0b00011001;

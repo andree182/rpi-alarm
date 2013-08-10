@@ -8,11 +8,11 @@ import sys
 def enum(**enums):
     return type('Enum', (), enums)
 
-if True:
-    NODE_TTY = "/dev/ttyAMA0"
-else:
-    # socat PTY,link=$HOME/testpty,echo=0,raw -
-    NODE_TTY = "/home/andree/testpty"
+# socat PTY,link=$HOME/testpty,echo=0,raw -
+for f in ["/dev/ttyAMA0", "/dev/ttyUSB0", "/home/andree/testpty"]:
+    if os.path.exists(f):
+        NODE_TTY=f
+        break
 
 sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
@@ -70,6 +70,9 @@ def detectFob(buf):
             return True
     return False
 
+def genBeepCmd(pitch):
+    return CMD_START_BEEP + pitch + "|!"
+
 tty = serial.Serial(NODE_TTY, baudrate = 9600, timeout = ALARM_LOCK_WARNING_INTERVAL * 0.5) # NOTE: timeout here specifies the granularity of events
 
 buf = ""
@@ -111,7 +114,7 @@ class AlarmWarning:
         global actions, tty
         self.beep = not self.beep
         if self.beep:
-            tty.write(CMD_START_BEEP + self.pitch)
+            tty.write(genBeepCmd(self.pitch))
         else:
             tty.write(CMD_STOP_BEEP)
 
@@ -125,7 +128,7 @@ class AlarmWarning:
     @staticmethod
     def notifyFob():
         for i in range(0,3):
-            tty.write(CMD_START_BEEP + BEEP_FOB)
+            tty.write(genBeepCmd(BEEP_FOB))
             time.sleep(0.05)
             tty.write(CMD_STOP_BEEP)
             time.sleep(0.05)
