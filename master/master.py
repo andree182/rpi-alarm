@@ -73,6 +73,12 @@ def detectFob(buf):
 def genBeepCmd(pitch):
     return CMD_START_BEEP + pitch + "|!"
 
+# safety to workaround missing characters and left out beeping/beep stop
+def ttyMultiWrite(cmd):
+    for i in range(0, 3):
+        time.sleep(0.05)
+        tty.write(cmd)
+
 tty = serial.Serial(NODE_TTY, baudrate = 9600, timeout = ALARM_LOCK_WARNING_INTERVAL * 0.5) # NOTE: timeout here specifies the granularity of events
 
 buf = ""
@@ -114,14 +120,14 @@ class AlarmWarning:
         global actions, tty
         self.beep = not self.beep
         if self.beep:
-            tty.write(genBeepCmd(self.pitch))
+            ttyMultiWrite(genBeepCmd(self.pitch))
         else:
-            tty.write(CMD_STOP_BEEP)
+            ttyMultiWrite(CMD_STOP_BEEP)
 
     @staticmethod
     def disarm():
         global actions, tty
-        tty.write(CMD_STOP_BEEP)
+        ttyMultiWrite(CMD_STOP_BEEP)
         actions = [a for a in actions if (not isinstance(a.action, AlarmWarning))]
         logmessage("AlarmWarning disable")
         
@@ -132,6 +138,7 @@ class AlarmWarning:
             time.sleep(0.05)
             tty.write(CMD_STOP_BEEP)
             time.sleep(0.05)
+        ttyMultiWrite(CMD_STOP_BEEP)
 
 class AlarmWarningIntensify:
     def run(self):
