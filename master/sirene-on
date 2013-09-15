@@ -1,18 +1,24 @@
 #!/bin/sh
 
-sudo su -c 'echo 23 > /sys/class/gpio/export'
-sudo su -c 'echo out > /sys/class/gpio/gpio23/direction'
+# NOTE:
+# We need the following packages for work: nullmailer sharutils(uuencode) fswebcam
 
-echo "sudo su -c 'echo 1 > /sys/class/gpio/gpio23/value'"
+if [ ! -d /sys/class/gpio/gpio23 ]; then
+    sudo su -c 'echo 23 > /sys/class/gpio/export'
+    sudo su -c 'echo out > /sys/class/gpio/gpio23/direction'
+fi
 
-exit 0
+# sudo su -c 'echo 1 > /sys/class/gpio/gpio23/value; echo 0 > /sys/class/gpio/gpio23/value'
+sudo su -c 'echo 0 > /sys/class/gpio/gpio23/value'
+
+# exit 0
 
 cd `dirname $0`
 
 while true; do
     shotname="photo`date +%s`.jpg"
     if ./get-webcam-pic $shotname >/dev/null 2>/dev/null; then
-        (echo "mail from home alarm: The sirene is active, the pic follows: " ; uuencode $shotname < $shotname) | sendmail andree@andree.sk
+        (echo "Subject: alarm activated!\n\nThis is mail from home alarm: The sirene is active, the pic follows: " ; uuencode $shotname < $shotname) | sendmail andree@andree.sk
         rm -f $shotname
     fi
     sleep 5
