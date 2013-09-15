@@ -48,8 +48,8 @@ FOB_DELAY = 5
 ALARM_WARNING_TIMEOUT = 0
 # maximum time between movement and alarm trigger
 ALARM_TIMEOUT = 15
-# time after fob entered after which the alarm is armed
-ALARM_ARM_TIMEOUT = 15
+# time after fob movement ends after which the lock warning ends
+ALARM_ARM_WARNING_TIMEOUT = 3
 # length of silence/beep during lock warning
 ALARM_LOCK_WARNING_INTERVAL = 1 # should be the smallest non-0 value around
 
@@ -82,8 +82,8 @@ def ttyMultiWrite(cmd):
 tty = serial.Serial(NODE_TTY, baudrate = 9600, timeout = ALARM_LOCK_WARNING_INTERVAL * 0.5) # NOTE: timeout here specifies the granularity of events
 
 buf = ""
-AlarmStatus = enum(OPEN = 0, LOCKING = 1, LOCKED = 2, TRIGGERED = 3)
-status = AlarmStatus.OPEN
+AlarmStatus = enum(UNLOCKED = 0, LOCKING = 1, LOCKED = 2, TRIGGERED = 3)
+status = AlarmStatus.UNLOCKED
 
 def logmessage(s):
     print(time.asctime() + ": " + s)
@@ -113,23 +113,19 @@ class NodeStatusRequest:
 
 class AlarmWarning:
     def __init__(self, pitch):
-        self.beep = False
         self.pitch = pitch
 
     def run(self):
         global actions, tty
-        self.beep = not self.beep
-        if self.beep:
-            ttyMultiWrite(genBeepCmd(self.pitch))
-        else:
-            ttyMultiWrite(CMD_STOP_BEEP)
+        ttyMultiWrite(genBeepCmd(self.pitch))
 
     @staticmethod
-    def disarm():
+    def disarm(stepBeeping = True):
         global actions, tty
-        ttyMultiWrite(CMD_STOP_BEEP)
+        if stepBeeping:
+            ttyMultiWrite(CMD_STOP_BEEP)
         actions = [a for a in actions if (not isinstance(a.action, AlarmWarning))]
-        logmessage("AlarmWarning disable")
+        # logmessage("AlarmWarning disable")
         
     @staticmethod
     def notifyFob():
@@ -140,17 +136,23 @@ class AlarmWarning:
             time.sleep(0.05)
         ttyMultiWrite(CMD_STOP_BEEP)
 
-class AlarmWarningIntensify:
+class AlarmLockedWarningDisable:
+    def run(self):
+        global actions
+        global AlarmStatus, status
+        AlarmWarning.disarm()
+        
+class AlarmLockedWarning:
     def run(self):
         global actions, tty
-        AlarmWarning.disarm()
-        actions += [Action(time.time() + ALARM_WARNING_TIMEOUT, AlarmWarning(BEEP_LOCK_WARNING_HI))]
+        AlarmWarning.disarm(False)
+        actions += [Action(time.time(), AlarmWarning(BEEP_LOCK_WARNING_HI))]
+        actions += [Action(time.time() + ALARM_ARM_WARNING_TIMEOUT, AlarmLockedWarningDisable())]
         
     @staticmethod
     def disarm():
         global actions
-        actions = [a for a in actions if (not isinstance(a.action, AlarmWarningIntensify))]
-        logmessage("AlarmWarningIntensify disable")
+        actions = [a for a in actions if (not isinstance(a.action, AlarmLockedWarning))]
         
 def subcall(path):
     subprocess.call(path, shell = False)
@@ -180,7 +182,7 @@ class AlarmDisable:
         AlarmWarning.disarm()
         Alarm.disarm()
         
-        status = AlarmStatus.OPEN
+        status = AlarmStatus.UNLOCKED
         actions = []
 
         logmessage("Alarm disabled")
@@ -189,7 +191,6 @@ class AlarmDisable:
 class AlarmArm:
     def run(self):
         global AlarmStatus, status
-        AlarmWarning.disarm()
         status = AlarmStatus.LOCKED
         logmessage("Locked")
         
@@ -207,10 +208,14 @@ class AlarmDelayedTrigger:
 
     @staticmethod
     def disarm():
-        global actions, tty
+        global actions, tty, status
         if [a for a in actions if (isinstance(a.action, AlarmDelayedTrigger))] != []:
             logmessage("False movement")
         actions = [a for a in actions if (not isinstance(a.action, AlarmDelayedTrigger))]
+        
+        if status == AlarmStatus.LOCKING:
+            actions += [Action(time.time() + ALARM_LOCK_WARNING_INTERVAL, AlarmLockedWarning())]
+            actions += [Action(time.time(), AlarmArm())]
         
 class HandleMovement:
     @staticmethod
@@ -239,19 +244,16 @@ class HandleFob:
         if (status == AlarmStatus.LOCKED) or (status == AlarmStatus.TRIGGERED):
             Alarm.disarm()
             AlarmWarning.disarm()
-            status = AlarmStatus.OPEN
-            logmessage("Open")
-        elif (status == AlarmStatus.OPEN):
+            status = AlarmStatus.UNLOCKED
+            logmessage("Unlocked")
+        elif (status == AlarmStatus.UNLOCKED):
             actions += [Action(time.time() + ALARM_WARNING_TIMEOUT, AlarmWarning(BEEP_LOCK_WARNING))]
-            actions += [Action(time.time() + ALARM_WARNING_TIMEOUT + ALARM_ARM_TIMEOUT * 0.75, AlarmWarningIntensify())]
-            actions += [Action(time.time() + ALARM_ARM_TIMEOUT, AlarmArm())]
             status = AlarmStatus.LOCKING
             logmessage("Locking")
         elif (status == AlarmStatus.LOCKING):
             AlarmWarning.disarm()
-            AlarmWarningIntensify.disarm()
             actions = [a for a in actions if not isinstance(a.action, AlarmArm)]
-            status = AlarmStatus.OPEN
+            status = AlarmStatus.UNLOCKED
             logmessage("Locking cancel")
 
         AlarmWarning.notifyFob()
@@ -260,6 +262,8 @@ class Action:
     def __init__(self, time, action):
         self.time = time
         self.action = action
+    def __repr__(self):
+        return str(self.time) + " => " + self.action.__class__.__name__
 
 class MovementAggregator:
     movementStatuses = {SENSOR_MOVEMENT:0, SENSOR_DOOR:0}
@@ -307,6 +311,7 @@ while True:
     needRescan = True
     while needRescan:
         needRescan = False
+        # print str(curTime) + ":" + str(actions)
         for a in actions:
             if (a.time <= curTime):
                 actionsOld = actions[:]
