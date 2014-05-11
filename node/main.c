@@ -14,6 +14,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
+#include <avr/wdt.h>
 #include "uart_io.h"
 #include "usi_uart.h"
 
@@ -143,9 +144,21 @@ static void print_usi_settings(void)
 
 #endif
 
+static void wdg_init(void)
+{    
+#if 0
+    WDTCSR |= (_BV(WDCE) | _BV(WDE));
+    WDTCSR = _BV(WDE) | /* (0 << WDIF) | (0 << WDIE) |*/ (/* 8s timeout */_BV(WDP3) | _BV(WDP0));
+#else
+    wdt_enable(WDTO_8S);
+#endif
+}
+
 int main (void)
 {
     int ocr1a, ocr1b;
+
+    wdg_init();
 
     /* 9600 baud with 8MHz div 8 */
     UART_init(12);
@@ -169,12 +182,15 @@ int main (void)
     USI_UART_init();
     USI_UART_flush();
     USI_UART_init_rx();
-    
+
     /* Private flags */
     READ_MOVEMENT();
     READ_DOORS_OPEN();
 
     sei();
+
+	msg('#');
+    msg('!');
     
     /* loop forever */
     while (1) {
@@ -183,6 +199,7 @@ int main (void)
             
             switch (c) {
             case '?':
+                wdt_reset();
                 blink_led(LED_RED);
                 msg('!');
                 break;
@@ -255,6 +272,7 @@ int main (void)
 #endif
             }
         } else if (USI_UART_receive_is_ready()) {
+            /* route USI->UART */
             blink_led(LED_RED_FAST);
             UART_transmit(USI_UART_receive());
         }
