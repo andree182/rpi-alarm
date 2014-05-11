@@ -17,6 +17,11 @@ $(PROJECT).out: $(SOURCES)
 
 program: $(PROJECT).hex
 	avrdude -v -p t2313 -c usbasp -e -U flash:w:$(PROJECT).hex
+
+fuses:
+	# enable watchdog and brown-out for 2.7V
+	avrdude -v -p t2313 -c usbasp -y -U hfuse:w:0xcb:m
+
 clean:
 	rm -f $(PROJECT).out
 	rm -f $(PROJECT).hex
