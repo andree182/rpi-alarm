@@ -23,6 +23,7 @@ CMD_START_BEEP = 'B'
 CMD_STOP_BEEP = 'b'
 CMD_PING = '?'
 CMD_PONG = '!'
+CMD_RESET = '#'
 CMD_STATUS_REQUEST = 'd'
 
 SENSOR_MOVEMENT = '0'
@@ -298,6 +299,8 @@ while True:
             MovementAggregator.end(nextSensorStatus)
         elif c == CMD_PONG:
             NodePong.handlePong()
+        elif c == CMD_RESET:
+            logmessage("Node reset")
         else:
             buf += CMD_START + c
     elif c != '':
