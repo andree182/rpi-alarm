@@ -7,7 +7,7 @@ Basically this is the connection used:
 
 
 
-[RPI]
+[RPI] --- [Webcam]
 
  |
  
@@ -30,6 +30,6 @@ It talks to RPI via regular RS232 UART.
 
 [Alarm] a 12V alarm device - just apply 12V/1A and it beeps real loud :)
 
+[Webcam] a webcam to gater images and send them to email, to alert owner
+
 [RPI] a RPI device. Ideally UPS-backed, obviously.
-
-
