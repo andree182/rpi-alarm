@@ -7,11 +7,13 @@ Basically this is the connection used:
 
 
 
-[RPI] ----- [Comm. HUB] ----- [Node]
-                 |
-              [Alarm]
-              
-  
+[RPI]
+ |
+[Comm. HUB] --- [Alarm]
+ |
+[Node]
+
+
 [Comm. HUB] just a level converter
 It converts a GPIO pin (using a MOSFET in my case) to 12V as a feed
 for the alarm audio device.
