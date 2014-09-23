@@ -50,11 +50,12 @@ ALARM_WARNING_TIMEOUT = 0
 # maximum time between movement and alarm trigger
 ALARM_TIMEOUT = 15
 # delay between movement end and lock (in case of locking)
-ALARM_LOCK_DELAY = 2
+ALARM_LOCK_DELAY = 5
 
 # time after which the automatic unlock happens (to prevent too whole day of alarm sirene buzzing)
 ALARM_DISABLE_TIMEOUT = 2 * 60
 
+# TODO: the below fobs can be decoded, but we don't really care, it's unique either way...
 FOBS = [
     "00002DCB28C>",
     "00002E44CFE7",
@@ -78,14 +79,16 @@ def ttyMultiWrite(cmd):
         time.sleep(0.05)
         tty.write(cmd)
 
+def logmessage(s):
+    print(time.asctime() + ": " + s)
+
 tty = serial.Serial(NODE_TTY, baudrate = 9600, timeout = 0.5) # NOTE: timeout here specifies the granularity of events
 
 buf = ""
 AlarmStatus = enum(UNLOCKED = 0, LOCKING = 1, LOCKED = 2, TRIGGERED = 3)
 status = AlarmStatus.LOCKED
 
-def logmessage(s):
-    print(time.asctime() + ": " + s)
+logmessage("(Re)start")
 
 class NodePing:
     def run(self):
@@ -149,15 +152,17 @@ class AlarmDelayedLock:
         global actions
         actions = [a for a in actions if (not isinstance(a.action, AlarmDelayedLock))]
         
-def subcall(path):
-    subprocess.call(path, shell = False)
+def subcall(path, wait = True):
+    p = subprocess.Popen(path, shell = False)
+    if wait:
+        p.wait()
 
 class Alarm:
     def run(self):
         global actions, tty
         global AlarmStatus, status
         actions += [Action(time.time() + ALARM_DISABLE_TIMEOUT, AlarmDisable())]
-        subcall("./sirene-on")
+        subcall("./sirene-on", False) # runs in the background # TODO wait for the zombie
         status = AlarmStatus.TRIGGERED
         logmessage("Alarm triggered")
 

@@ -1,5 +1,4 @@
 #!/bin/sh
-
 # NOTE:
 # We need the following packages for work: nullmailer sharutils(uuencode) fswebcam
 
@@ -9,9 +8,7 @@ if [ ! -d /sys/class/gpio/gpio23 ]; then
 fi
 
 # sudo su -c 'echo 1 > /sys/class/gpio/gpio23/value; echo 0 > /sys/class/gpio/gpio23/value'
-sudo su -c 'echo 0 > /sys/class/gpio/gpio23/value'
-
-# exit 0
+sudo su -c 'echo 1 > /sys/class/gpio/gpio23/value'
 
 cd `dirname $0`
 
