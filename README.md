@@ -8,9 +8,13 @@ Basically this is the connection used:
 
 
 [RPI]
+
  |
+ 
 [Comm. HUB] --- [Alarm]
+
  |
+ 
 [Node]
 
 
